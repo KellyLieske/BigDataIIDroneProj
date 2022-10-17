@@ -19,7 +19,15 @@ def recv_thread(drone):
 
 
     try:
-        container = av.open(drone.get_video_stream())
+        retry = 3
+        container = None
+        while container is None and 0 < retry:
+            retry -= 1
+            try:
+                container = av.open(drone.get_video_stream())
+            except av.AVError as ave:
+                print(ave)
+                print('retry...')
         # skip first 300 frames
         frame_skip = 300
         while True:
@@ -29,7 +37,6 @@ def recv_thread(drone):
                     continue
                 start_time = time.time()
                 image = cv2.cvtColor(numpy.array(frame.to_image()), cv2.COLOR_RGB2BGR)
-
 
                 new_image = image
                 if frame.time_base < 1.0/60:
@@ -48,6 +55,7 @@ if __name__ == '__main__':
     global new_image
     pygame.init()
     pygame.joystick.init()
+    new_image = None
     current_image = None
     joy = pygame.joystick.Joystick(0)
     joy.init()
@@ -55,7 +63,7 @@ if __name__ == '__main__':
 
     drone = tellopy.Tello()
 
-    time.sleep(2)
+
     drone.connect()
 
     #drone.land()
@@ -80,31 +88,33 @@ if __name__ == '__main__':
     buttonSl = 6
 
     threading.Thread(target=recv_thread, args=[drone]).start()
+    time.sleep(5)
+    try:
+        while val:
+            for event in pygame.event.get():
+                if event.type == pygame.locals.JOYAXISMOTION:
+                    if event.axis == 1 and event.value > .95:
+                        drone.backward(event.value * 15)
+                    elif event.axis == 1 and event.value < -.95:
+                        drone.forward(event.value * -15)
+                    elif event.axis == 0 and event.value > .95:
+                        drone.right(event.value * 15)
+                    elif event.axis == 0 and event.value < -.95:
+                        drone.left(event.value * -15)
 
-    while val:
-        for event in pygame.event.get():
-            if event.type == pygame.locals.JOYAXISMOTION:
-                if event.axis == 1 and event.value > .95:
-                    drone.backward(event.value * 15)
-                elif event.axis == 1 and event.value < -.95:
-                    drone.forward(event.value * -15)
-                elif event.axis == 0 and event.value > .95:
-                    drone.right(event.value * 15)
-                elif event.axis == 0 and event.value < -.95:
-                    drone.left(event.value * -15)
-
-                #drone.left(0)
-                #print(event)
-            elif event.type == pygame.locals.JOYBUTTONDOWN:
-                if event.button == 7:
-                    drone.takeoff()
-                elif event.button == 6:
-                    drone.land()
+                    #drone.left(0)
+                    #print(event)
+                elif event.type == pygame.locals.JOYBUTTONDOWN:
+                    if event.button == 7:
+                        drone.takeoff()
+                    elif event.button == 6:
+                        drone.land()
             if current_image is not new_image:
                 cv2.imshow('Tello', new_image)
                 current_image = new_image
                 cv2.waitKey(1)
-
+    except Exception  as e:
+        print(e)
                 # print(event)
 
 
